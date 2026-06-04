@@ -1,0 +1,158 @@
+# ============================================================
+# security-scan.yml
+# AI-powered CI/CD Threat Detection Pipeline
+#
+# WHAT THIS DOES:
+#   Runs on every PR and push to main. Calls Azure OpenAI to
+#   analyze pipeline logs, code changes, and environment for
+#   threats. Blocks PRs on CRITICAL findings. Alerts on HIGH+.
+#
+# DETECTION MODULES (scripts live in detection/):
+#   secrets_scanner.py  → leaked credentials, API keys, tokens
+#   ai_analyzer.py      → AI-powered anomaly + threat analysis
+#   reporter.py         → sends Teams alert on HIGH/CRITICAL
+#   gate.py             → fails build on CRITICAL (blocks PR)
+# ============================================================
+
+# ── TRIGGERS ────────────────────────────────────────────────
+# When does this pipeline fire?
+
+trigger:
+  branches:
+    include:
+      - main
+      - releases/*
+
+pr:
+  branches:
+    include:
+      - main              # PR into main must pass this scan
+
+schedules:
+  - cron: "0 2 * * *"     # 2am UTC nightly
+    displayName: Nightly deep scan
+    branches:
+      include:
+        - main
+    always: true          # run even with no new commits (catches new CVEs)
+
+# ── VARIABLES ───────────────────────────────────────────────
+# Plain config here. Secrets come from Key Vault, never hardcoded.
+
+variables:
+  pythonVersion: "3.11"
+  scanOutputDir: "$(Build.ArtifactStagingDirectory)/security-reports"
+  severityThreshold: "HIGH"
+  # Secrets are set as pipeline variables directly (locked/secret)
+  # ANTHROPIC_API_KEY is set in Pipeline → Variables with lock icon
+
+# ── POOL ────────────────────────────────────────────────────
+# Which machine runs this? Microsoft-hosted Ubuntu for now.
+# For production inside MSFT: swap to your private agent pool
+# (required for CFSClean / network-isolated environments).
+
+pool:
+  vmImage: ubuntu-latest
+
+# ── STAGES ──────────────────────────────────────────────────
+
+stages:
+
+  # ── STAGE 1: Scan ─────────────────────────────────────────
+  - stage: Scan
+    displayName: "Security scan"
+    jobs:
+      - job: DetectThreats
+        displayName: "Run AI threat detection"
+        timeoutInMinutes: 30
+
+        steps:
+
+          # 1. Python runtime
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+            displayName: "Set up Python $(pythonVersion)"
+
+          # 2. Detection script dependencies
+          - script: |
+              pip install --upgrade pip
+              pip install openai azure-identity azure-keyvault-secrets \
+                          requests pyyaml python-dotenv
+            displayName: "Install dependencies"
+
+
+          # 4. Secrets scanner — finds leaked creds in source tree
+          - script: |
+              mkdir -p "$(scanOutputDir)"
+              python detection/secrets_scanner.py \
+                --path "$(Build.SourcesDirectory)" \
+                --output "$(scanOutputDir)/secrets.json"
+            displayName: "Scan for leaked secrets"
+
+          # 5. AI threat analysis — calls Azure OpenAI
+          #    Env vars map KV secret names (hyphens) to script vars (underscores)
+          - script: |
+              python detection/ai_analyzer.py \
+                --build-id "$(Build.BuildId)" \
+                --branch "$(Build.SourceBranchName)" \
+                --commit "$(Build.SourceVersion)" \
+                --output "$(scanOutputDir)/ai-findings.json"
+            displayName: "AI threat analysis"
+            env:
+              AZURE_OPENAI_ENDPOINT: $(AZURE-OPENAI-ENDPOINT)
+              AZURE_OPENAI_API_KEY: $(AZURE-OPENAI-API-KEY)
+
+          # 6. Keep reports as artifacts for 30 days
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: "$(scanOutputDir)"
+              ArtifactName: "security-reports"
+              publishLocation: "Container"
+            displayName: "Publish scan reports"
+            condition: always()   # publish even if scan found threats
+
+  # ── STAGE 2: Alert ────────────────────────────────────────
+  - stage: Report
+    displayName: "Send alerts"
+    dependsOn: Scan
+    condition: succeeded()
+    jobs:
+      - job: Notify
+        displayName: "Teams alert on HIGH+"
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              artifactName: "security-reports"
+              downloadPath: "$(scanOutputDir)"
+            displayName: "Download scan reports"
+
+          - script: |
+              python detection/reporter.py \
+                --findings "$(scanOutputDir)/security-reports/ai-findings.json" \
+                --threshold "$(severityThreshold)"
+            displayName: "Send alert if HIGH or above"
+            env:
+              TEAMS_WEBHOOK_URL: $(TEAMS-WEBHOOK-URL)
+
+  # ── STAGE 3: Gate ─────────────────────────────────────────
+  - stage: Gate
+    displayName: "PR gate — block on CRITICAL"
+    dependsOn: Scan
+    condition: succeeded()
+    jobs:
+      - job: EnforceGate
+        displayName: "Fail build on CRITICAL"
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              artifactName: "security-reports"
+              downloadPath: "$(scanOutputDir)"
+            displayName: "Download scan reports"
+
+          - script: |
+              python detection/gate.py \
+                --findings "$(scanOutputDir)/security-reports/ai-findings.json" \
+                --fail-on CRITICAL
+            displayName: "Enforce CRITICAL gate"
+            # gate.py exits with code 1 on CRITICAL → pipeline fails → PR blocked
