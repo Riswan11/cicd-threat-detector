@@ -1,0 +1,40 @@
+# CODEOWNERS
+# ──────────
+# Maps file paths to owning teams. The secrets scanner reads this
+# file to automatically assign findings to the right team based
+# on which files were flagged.
+
+# ── Default owner ─────────────────────────────────────────────
+*                           platform-security-team
+
+# ── Detection scripts ─────────────────────────────────────────
+/detection/*                security-engineering-team
+
+# ── Pipeline definitions ──────────────────────────────────────
+/.pipelines/*               devsecops-team
+/.github/workflows/*        devsecops-team
+
+# ── Auth and identity ─────────────────────────────────────────
+/auth/*                     security-auth-team
+/identity/*                 security-auth-team
+/oauth/*                    security-auth-team
+
+# ── Payment and billing ───────────────────────────────────────
+/payment/*                  payment-platform-team
+/billing/*                  payment-platform-team
+
+# ── Infrastructure ────────────────────────────────────────────
+/infra/*                    cloud-infrastructure-team
+/terraform/*                cloud-infrastructure-team
+*.bicep                     cloud-infrastructure-team
+*.tf                        cloud-infrastructure-team
+
+# ── API and backend ───────────────────────────────────────────
+/api/*                      backend-platform-team
+/services/*                 backend-platform-team
+
+# ── Configuration ─────────────────────────────────────────────
+*.yml                       devsecops-team
+*.yaml                      devsecops-team
+*.json                      platform-security-team
+*.env                       platform-security-team
