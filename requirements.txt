@@ -1,0 +1,9 @@
+# AI + Azure
+openai==1.30.1
+azure-identity==1.16.0
+azure-keyvault-secrets==4.8.0
+ 
+# HTTP + utilities
+requests==2.32.2
+python-dotenv==1.0.1
+pyyaml==6.0.1
