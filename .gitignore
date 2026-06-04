@@ -1,0 +1,25 @@
+cat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Secrets — never commit these
+*.key
+*.pem
+*.pfx
+.env.local
+secrets.json
+local.settings.json
+
+# Scan outputs (stay local, not in repo)
+security-reports/
+*.findings.json
+
+# IDE
+.vscode/
+.idea/
+EOFsecurity-reports/
