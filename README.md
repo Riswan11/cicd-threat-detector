@@ -1,4 +1,4 @@
-CI/CD Threat Detection Pipeline
+# CI/CD Threat Detection Pipeline
 An AI-powered security scanner that automatically detects threats, anomalies, and leaked secrets in CI/CD pipelines. Built as a portfolio project while transitioning into a Security Engineering / Threat Detection role.
 Every finding is enriched with MITRE ATT&CK technique mappings, a quantitative risk score, lifecycle state tracking, and SARIF 2.1.0 output for enterprise SIEM ingestion — validated against a suite of simulated attack scenarios.
 
