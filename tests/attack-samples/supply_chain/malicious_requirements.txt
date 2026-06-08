@@ -1,0 +1,37 @@
+# ATTACK SAMPLE: Malicious/Typosquatted Dependencies
+# ────────────────────────────────────────────────────
+# Technique : T1195.002 — Compromise Software Supply Chain
+# Tactic    : Initial Access (TA0001)
+# Severity  : CRITICAL
+#
+# Scenario:
+#   Attacker submits a PR that swaps a legitimate package for a
+#   typosquatted malicious one. The XZ Utils backdoor (2024) and
+#   the PyPI "requests" typosquat used exactly this vector.
+#
+# Red flags in this file:
+#   1. Package name is a known typosquat (colourama vs colorama)
+#   2. Version is unpinned (no ==) — allows malicious updates
+#   3. Direct install from unverified GitHub (not PyPI)
+#   4. Package added with no corresponding PR description or ticket
+#
+# Expected detection:
+#   ai_analyzer.py → MEDIUM/HIGH supply chain finding
+#   secrets_scanner.py → no finding (no credentials)
+
+# Legitimate packages (pinned)
+requests==2.32.2
+flask==3.0.3
+sqlalchemy==2.0.30
+
+# INTENTIONALLY BAD: typosquatted package (colourama ≠ colorama)
+colourama
+
+# INTENTIONALLY BAD: unpinned version allows silent malicious updates
+cryptographY
+
+# INTENTIONALLY BAD: direct GitHub install bypasses PyPI security scanning
+setuptools @ git+https://github.com/unknown-user/setuptools-fork@main
+
+# INTENTIONALLY BAD: known malicious package name pattern
+python-dateutil-plus
