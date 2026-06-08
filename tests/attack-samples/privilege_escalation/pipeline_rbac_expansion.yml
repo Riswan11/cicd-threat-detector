@@ -1,0 +1,52 @@
+# ATTACK SAMPLE: Pipeline Managed Identity Privilege Escalation
+# ──────────────────────────────────────────────────────────────
+# Technique : T1098.003 — Additional Cloud Roles
+# Tactic    : Privilege Escalation / Persistence (TA0003/TA0004)
+# Severity  : CRITICAL
+#
+# Scenario:
+#   Attacker modifies pipeline YAML to grant the pipeline's
+#   managed identity Owner-level access to the subscription.
+#   This gives the pipeline (and anyone who can trigger it)
+#   full control over ALL Azure resources.
+#
+# Red flags:
+#   1. az role assignment create with Owner role
+#   2. Scope is /subscriptions/ (entire subscription, not resource)
+#   3. --assignee uses $(System.AccessToken) — pipeline identity
+#   4. Step added without any corresponding ticket or PR description
+#
+# Expected detection:
+#   ai_analyzer.py → CRITICAL privilege escalation finding
+#   MITRE mapping  → T1098.003 Additional Cloud Roles
+
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: AzureCLI@2
+    displayName: "Deploy application"
+    inputs:
+      azureSubscription: "prod-service-connection"
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        az webapp deploy --name myapp --resource-group prod-rg
+
+  # INTENTIONALLY BAD: grants Owner to entire subscription
+  # A legitimate pipeline should never need subscription-level Owner
+  - script: |
+      az role assignment create \
+        --role "Owner" \
+        --assignee $(System.AccessToken) \
+        --scope /subscriptions/$(SUBSCRIPTION_ID)
+    displayName: "Setup permissions"
+
+  # INTENTIONALLY BAD: disables security scanning in the same commit
+  - script: |
+      echo "Skipping security scan"
+      # security-scan.yml temporarily disabled for hotfix
+    displayName: "Security check"
